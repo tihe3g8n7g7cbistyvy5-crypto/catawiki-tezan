@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catawiki 手残り電卓</title>
+<style>
+  :root{
+    --bg:#16181c; --panel:#1e2127; --panel2:#23272e; --line:#2f343c;
+    --ink:#e9e5db; --muted:#9aa0a9; --brass:#c9a86a; --brass-dim:#7d6c46;
+    --go:#6fae86; --stop:#d0866f;
+    --font-sans:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    --font-mono:"SF Mono",Consolas,"Roboto Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font-sans); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:20px 16px 48px;
+  }
+  .wrap{max-width:440px;margin:0 auto}
+  .eyebrow{
+    font-size:11px; letter-spacing:.28em; color:var(--brass);
+    text-transform:uppercase; margin:0 0 6px;
+  }
+  h1{font-size:22px;font-weight:600;margin:0 0 22px;letter-spacing:.01em}
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:18px 16px; margin-bottom:16px;
+  }
+  .field{margin-bottom:14px}
+  .field:last-child{margin-bottom:0}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .inputrow{display:flex;align-items:center;gap:8px}
+  .unit{font-size:13px;color:var(--muted);min-width:34px}
+  input[type="number"]{
+    width:100%; background:var(--panel2); border:1px solid var(--line);
+    border-radius:9px; color:var(--ink); font-family:var(--font-mono);
+    font-size:17px; padding:11px 12px; text-align:right;
+    font-variant-numeric:tabular-nums; -moz-appearance:textfield;
+  }
+  input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 2px rgba(201,168,106,.18)}
+  .two{display:flex;gap:12px}
+  .two .field{flex:1}
+  .conv{font-size:12px;color:var(--brass);text-align:right;margin-top:6px;
+    font-family:var(--font-mono);font-variant-numeric:tabular-nums;min-height:15px}
+
+  /* verdict / readout */
+  .verdict{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line); border-radius:14px; padding:20px 18px;
+    text-align:center; position:relative; overflow:hidden;
+  }
+  .verdict::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brass)}
+  .pill{
+    display:inline-block; font-size:12px; letter-spacing:.14em; font-weight:600;
+    padding:4px 14px; border-radius:999px; text-transform:uppercase; margin-bottom:12px;
+  }
+  .pill.go{background:rgba(111,174,134,.14);color:var(--go);border:1px solid rgba(111,174,134,.35)}
+  .pill.stop{background:rgba(208,134,111,.14);color:var(--stop);border:1px solid rgba(208,134,111,.35)}
+  .pill.na{background:rgba(154,160,169,.12);color:var(--muted);border:1px solid var(--line)}
+  .big{
+    font-family:var(--font-mono); font-size:38px; font-weight:600;
+    font-variant-numeric:tabular-nums; letter-spacing:-.01em; line-height:1.1;
+  }
+  .big .yen{font-size:22px;color:var(--muted);font-weight:400;margin-right:2px}
+  .biglabel{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.04em}
+  .rate{font-size:12px;color:var(--brass);margin-top:14px}
+
+  .breakdown{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
+  .row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0}
+  .row .k{color:var(--muted)}
+  .row .v{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .row.strong .v{color:var(--ink)}
+  .row.sub .v{color:var(--muted)}
+  .foot{font-size:11px;color:var(--muted);margin-top:18px;text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Curated by Rin — demo</p>
+  <h1>Catawiki 手残り電卓</h1>
+
+  <div class="card">
+    <div class="field">
+      <label>カタウィキ販売価格</label>
+      <div class="inputrow"><input id="eur" type="number" inputmode="decimal" placeholder="0"><span class="unit">EUR</span></div>
+      <div class="conv" id="eurjpy"></div>
+    </div>
+    <div class="two">
+      <div class="field">
+        <label>EUR/JPY（現レート）</label>
+        <div class="inputrow"><input id="rate" type="number" inputmode="decimal" value="180"></div>
+      </div>
+      <div class="field">
+        <label>手数料率</label>
+        <div class="inputrow"><input id="fee" type="number" inputmode="decimal" value="15"><span class="unit">%</span></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>ヤフオク予想落札額（仕入れ）</label>
+      <div class="inputrow"><input id="cost" type="number" inputmode="numeric" placeholder="0"><span class="unit">円</span></div>
+    </div>
+    <div class="two">
+      <div class="field">
+        <label>追加コスト（送料・梱包など）</label>
+        <div class="inputrow"><input id="extra" type="number" inputmode="numeric" value="0"><span class="unit">円</span></div>
+      </div>
+      <div class="field">
+        <label>GO判定ライン</label>
+        <div class="inputrow"><input id="thresh" type="number" inputmode="numeric" value="10000"><span class="unit">円</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <span id="pill" class="pill na">入力待ち</span>
+    <div class="big"><span class="yen">¥</span><span id="tezan">—</span></div>
+    <div class="biglabel">手残り（現レート）／ 利益率 <span id="margin">—</span></div>
+    <div class="rate" id="conservative">保守レート180での手残り：—</div>
+
+    <div class="breakdown">
+      <div class="row"><span class="k">入金額（手数料差引後）</span><span class="v" id="net">—</span></div>
+      <div class="row sub"><span class="k">− ヤフオク仕入れ</span><span class="v" id="ocost">—</span></div>
+      <div class="row sub"><span class="k">− 追加コスト</span><span class="v" id="oextra">—</span></div>
+      <div class="row strong"><span class="k">＝ 手残り</span><span class="v" id="ftezan">—</span></div>
+    </div>
+  </div>
+
+  <p class="foot">現レートは手入力。判定は保守レート180の手残りで行います。<br>これはHTML版のイメージ用デモです。</p>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const yen = n => Math.round(n).toLocaleString('ja-JP');
+  const CONS = 180; // 保守レート
+
+  function calc(){
+    const eur   = parseFloat($('eur').value);
+    const rate  = parseFloat($('rate').value);
+    const fee   = parseFloat($('fee').value);
+    const cost  = parseFloat($('cost').value) || 0;
+    const extra = parseFloat($('extra').value) || 0;
+    const thr   = parseFloat($('thresh').value) || 0;
+
+    // EUR→JPY 単純換算（現レート、手数料前）
+    if(!isNaN(eur) && eur > 0 && !isNaN(rate) && rate > 0){
+      $('eurjpy').textContent = '≈ ¥'+yen(eur*rate)+'（現レート換算）';
+    } else {
+      $('eurjpy').textContent = '';
+    }
+
+    const ready = !isNaN(eur) && eur > 0 && !isNaN(rate) && rate > 0 && !isNaN(fee);
+    if(!ready){
+      $('pill').className='pill na'; $('pill').textContent='入力待ち';
+      $('tezan').textContent='—'; $('margin').textContent='—';
+      $('conservative').textContent='保守レート180での手残り：—';
+      ['net','ocost','oextra','ftezan'].forEach(k=>$(k).textContent='—');
+      return;
+    }
+
+    const keep = 1 - fee/100;
+    const net  = eur * rate * keep;          // 現レート入金額
+    const tezan = net - cost - extra;         // 現レート手残り
+    const netC = eur * CONS * keep;           // 保守入金額
+    const tezanC = netC - cost - extra;       // 保守手残り
+    const base = cost + extra;
+    const margin = base > 0 ? (tezan / base * 100) : null;
+
+    $('net').textContent   = '¥'+yen(net);
+    $('ocost').textContent = '−¥'+yen(cost);
+    $('oextra').textContent= '−¥'+yen(extra);
+    $('ftezan').textContent= '¥'+yen(tezan);
+    $('tezan').textContent = yen(tezan);
+    $('margin').textContent= margin===null ? '—' : (margin>=0?'+':'')+margin.toFixed(0)+'%';
+    $('conservative').textContent = '保守レート180での手残り：¥'+yen(tezanC);
+
+    if(tezanC >= thr){ $('pill').className='pill go'; $('pill').textContent='GO'; }
+    else{ $('pill').className='pill stop'; $('pill').textContent='見送り'; }
+  }
+
+  document.querySelectorAll('input').forEach(el=>el.addEventListener('input',calc));
+  calc();
+</script>
+</body>
+</html>
