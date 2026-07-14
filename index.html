@@ -114,7 +114,7 @@
         <span class="unit">円</span>
         <button type="button" class="revbtn" id="revcalc">逆算</button>
       </div>
-      <div class="revhint">1回目＝保守レート180で手残りがGO判定ライン額になる仕入れ上限を自動入力。もう一度押すと1000円単位に切り捨て（コピペ用）。</div>
+      <div class="revhint">1回目＝仕入れ上限（保守レート180で手残り＝GO判定ライン額）。2回目＝1000円切り捨て、3回目＝1000円切り上げ（コピペ用）。</div>
     </div>
     <div class="two">
       <div class="field">
@@ -200,8 +200,8 @@
     calc();
   }));
 
-  // 逆算ボタン: 1回目=正確な仕入れ上限、2回目=1000円単位に切り捨て、以降は交互
-  let revState = 'idle';   // 'idle' | 'exact' | 'rounded'
+  // 逆算ボタン: 1回目=正確な仕入れ上限、2回目=1000円切り捨て、3回目=1000円切り上げ、以降くり返し
+  let revState = 'idle';   // 'idle' | 'exact' | 'down' | 'up'
   let exactVal = 0;
 
   $('revcalc').addEventListener('click', ()=>{
@@ -213,11 +213,14 @@
     }
     if(revState === 'exact'){
       // 2回目: 1000円単位に切り捨て（1000円未満はそのまま据え置き）
-      const rounded = exactVal >= 1000 ? Math.floor(exactVal/1000)*1000 : exactVal;
-      $('cost').value = rounded;
-      revState = 'rounded';
+      $('cost').value = exactVal >= 1000 ? Math.floor(exactVal/1000)*1000 : exactVal;
+      revState = 'down';
+    } else if(revState === 'down'){
+      // 3回目: 1000円単位に切り上げ
+      $('cost').value = Math.ceil(exactVal/1000)*1000;
+      revState = 'up';
     } else {
-      // 1回目（またはidle/rounded後）: 保守レート180で手残り=GO判定ライン額になる仕入れ上限
+      // 1回目（idle / up後）: 保守レート180で手残り=GO判定ライン額になる仕入れ上限
       const extra = parseFloat($('extra').value) || 0;
       const thr   = parseFloat($('thresh').value) || 0;
       exactVal = Math.max(0, Math.floor(eur * CONS * (1 - fee/100) - extra - thr));
