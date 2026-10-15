@@ -114,7 +114,7 @@
         <span class="unit">円</span>
         <button type="button" class="revbtn" id="revcalc">逆算</button>
       </div>
-      <div class="revhint">1回目＝仕入れ上限（保守レート180で手残り＝GO判定ライン額）。2回目＝1000円切り捨て、3回目＝1000円切り上げ（コピペ用）。</div>
+      <div class="revhint">1回目＝仕入れ上限（入力したレートで手残り＝GO判定ライン額）。2回目＝1000円切り捨て、3回目＝1000円切り上げ（コピペ用）。</div>
     </div>
     <div class="two">
       <div class="field">
@@ -132,7 +132,7 @@
     <span id="pill" class="pill na">入力待ち</span>
     <div class="big"><span class="yen">¥</span><span id="tezan">—</span></div>
     <div class="biglabel">手残り（現レート）／ 利益率 <span id="margin">—</span></div>
-    <div class="rate" id="conservative">保守レート180での手残り：—</div>
+    <div class="rate" id="gap">GO判定ラインとの差：—</div>
 
     <div class="breakdown">
       <div class="row"><span class="k">入金額（手数料差引後）</span><span class="v" id="net">—</span></div>
@@ -142,13 +142,19 @@
     </div>
   </div>
 
-  <p class="foot">現レートは手入力。判定は保守レート180の手残りで行います。<br>これはHTML版のイメージ用デモです。</p>
+  <p class="foot">判定と逆算は、入力したレートで行います。<br>入力したレートはこの端末に保存され、次に開いたときも使われます。<br>これはHTML版のイメージ用デモです。</p>
 </div>
 
 <script>
   const $ = id => document.getElementById(id);
   const yen = n => Math.round(n).toLocaleString('ja-JP');
-  const CONS = 180; // 保守レート
+  const RATE_KEY = 'catawiki-tezan.rate'; // 入力したレートの保存先（端末ごと）
+
+  // 前回入力したレートを復元（保存できない環境では初期値のまま）
+  try{
+    const saved = localStorage.getItem(RATE_KEY);
+    if(saved !== null && parseFloat(saved) > 0) $('rate').value = saved;
+  }catch(e){}
 
   function calc(){
     const eur   = parseFloat($('eur').value);
@@ -158,7 +164,7 @@
     const extra = parseFloat($('extra').value) || 0;
     const thr   = parseFloat($('thresh').value) || 0;
 
-    // EUR→JPY 単純換算（現レート、手数料前）
+    // EUR→JPY 単純換算（入力したレート、手数料前）
     if(!isNaN(eur) && eur > 0 && !isNaN(rate) && rate > 0){
       $('eurjpy').textContent = '≈ ¥'+yen(eur*rate)+'（現レート換算）';
     } else {
@@ -169,18 +175,17 @@
     if(!ready){
       $('pill').className='pill na'; $('pill').textContent='入力待ち';
       $('tezan').textContent='—'; $('margin').textContent='—';
-      $('conservative').textContent='保守レート180での手残り：—';
+      $('gap').textContent='GO判定ラインとの差：—';
       ['net','ocost','oextra','ftezan'].forEach(k=>$(k).textContent='—');
       return;
     }
 
-    const keep = 1 - fee/100;
-    const net  = eur * rate * keep;          // 現レート入金額
-    const tezan = net - cost - extra;         // 現レート手残り
-    const netC = eur * CONS * keep;           // 保守入金額
-    const tezanC = netC - cost - extra;       // 保守手残り
-    const base = cost + extra;
+    const keep  = 1 - fee/100;
+    const net   = eur * rate * keep;          // 入金額（入力したレート）
+    const tezan = net - cost - extra;         // 手残り（入力したレート）
+    const base  = cost + extra;
     const margin = base > 0 ? (tezan / base * 100) : null;
+    const gap   = tezan - thr;                // GO判定ラインとの差
 
     $('net').textContent   = '¥'+yen(net);
     $('ocost').textContent = '−¥'+yen(cost);
@@ -188,9 +193,9 @@
     $('ftezan').textContent= '¥'+yen(tezan);
     $('tezan').textContent = yen(tezan);
     $('margin').textContent= margin===null ? '—' : (margin>=0?'+':'')+margin.toFixed(0)+'%';
-    $('conservative').textContent = '保守レート180での手残り：¥'+yen(tezanC);
+    $('gap').textContent   = 'GO判定ラインとの差：'+(gap>=0?'+':'−')+'¥'+yen(Math.abs(gap));
 
-    if(tezanC >= thr){ $('pill').className='pill go'; $('pill').textContent='GO'; }
+    if(tezan >= thr){ $('pill').className='pill go'; $('pill').textContent='GO'; }
     else{ $('pill').className='pill stop'; $('pill').textContent='見送り'; }
   }
 
@@ -200,15 +205,23 @@
     calc();
   }));
 
+  // 入力したレートを保存
+  $('rate').addEventListener('input', ()=>{
+    try{
+      if(parseFloat($('rate').value) > 0) localStorage.setItem(RATE_KEY, $('rate').value);
+    }catch(e){}
+  });
+
   // 逆算ボタン: 1回目=正確な仕入れ上限、2回目=1000円切り捨て、3回目=1000円切り上げ、以降くり返し
   let revState = 'idle';   // 'idle' | 'exact' | 'down' | 'up'
   let exactVal = 0;
 
   $('revcalc').addEventListener('click', ()=>{
-    const eur = parseFloat($('eur').value);
-    const fee = parseFloat($('fee').value);
-    if(isNaN(eur) || eur <= 0 || isNaN(fee)){
-      alert('先にカタウィキ販売価格(EUR)を入力してください');
+    const eur  = parseFloat($('eur').value);
+    const rate = parseFloat($('rate').value);
+    const fee  = parseFloat($('fee').value);
+    if(isNaN(eur) || eur <= 0 || isNaN(rate) || rate <= 0 || isNaN(fee)){
+      alert('先にカタウィキ販売価格(EUR)とレートを入力してください');
       return;
     }
     if(revState === 'exact'){
@@ -220,10 +233,10 @@
       $('cost').value = Math.ceil(exactVal/1000)*1000;
       revState = 'up';
     } else {
-      // 1回目（idle / up後）: 保守レート180で手残り=GO判定ライン額になる仕入れ上限
+      // 1回目（idle / up後）: 入力したレートで手残り=GO判定ライン額になる仕入れ上限
       const extra = parseFloat($('extra').value) || 0;
       const thr   = parseFloat($('thresh').value) || 0;
-      exactVal = Math.max(0, Math.floor(eur * CONS * (1 - fee/100) - extra - thr));
+      exactVal = Math.max(0, Math.floor(eur * rate * (1 - fee/100) - extra - thr));
       $('cost').value = exactVal;
       revState = 'exact';
     }
